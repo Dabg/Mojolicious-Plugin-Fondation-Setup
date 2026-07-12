@@ -4,7 +4,7 @@ Mojolicious::Plugin::Fondation::Setup - Setup wizard generator — scans plugins
 
 # VERSION
 
-version 0.01
+version 0.02
 
 # SYNOPSIS
 
@@ -15,24 +15,19 @@ version 0.01
         ],
     };
 
-    # CLI
-    $ myapp.pl setup generate
-    $ myapp.pl setup generate -y
-
     # Web wizard
     /setup          — Setup wizard UI
+    /setup/plugins  — Plugin selection page
     /setup/execute  — POST form data + execute action
     /setup/reset    — Reset wizard
 
 # DESCRIPTION
 
-This plugin provides:
-
-- `setup generate` command — scans plugins for `setup` declarations in
-`fondation_meta` and generates `share/workflows/setup.yaml`
-- Web wizard at `/setup` — interactive multi-step form driven by
-[Fondation::Workflow](https://metacpan.org/pod/Fondation%3A%3AWorkflow), with [Workflow::Persister::File](https://metacpan.org/pod/Workflow%3A%3APersister%3A%3AFile) (no database
-required)
+This plugin provides an interactive web wizard at `/setup` for configuring
+Fondation applications. It discovers available plugins via MetaCPAN, lets the
+user pick which ones to enable, and walks through their configuration
+parameters step by step using [Fondation::Workflow](https://metacpan.org/pod/Fondation%3A%3AWorkflow) with
+[Workflow::Persister::File](https://metacpan.org/pod/Workflow%3A%3APersister%3A%3AFile) (no database required).
 
 # NAME
 
@@ -66,18 +61,13 @@ default, required, min, max, placeholder, options (for select type).
 
 # OUTPUT
 
-- `share/workflows/setup.yaml`
+## $moniker.conf
 
-    Workflow definition generated from all plugins' `setup` declarations.
-    Committed to the application repository. Manually editable.
-
-- `$moniker.conf`
-
-    Application configuration file written when the user clicks "Save" in the
-    wizard.  Top-level key is `Fondation`, with `dependencies` listing every
-    selected plugin.  Plugins that have `setup` parameters are wrapped in a
-    hashref with their config; plugins without `setup` parameters are listed as
-    plain strings.
+Application configuration file written when the user clicks "Save" in the
+wizard.  Top-level key is `Fondation`, with `dependencies` listing every
+selected plugin.  Plugins that have `setup` parameters are wrapped in a
+hashref with their config; plugins without `setup` parameters are listed as
+plain strings.
 
 # WIZARD FLOW
 
@@ -108,7 +98,6 @@ to the startup script and restart.
 
 # SEE ALSO
 
-[Mojolicious::Plugin::Fondation::Setup::Command::setup](https://metacpan.org/pod/Mojolicious%3A%3APlugin%3A%3AFondation%3A%3ASetup%3A%3ACommand%3A%3Asetup),
 [Mojolicious::Plugin::Fondation::Setup::Controller::Setup](https://metacpan.org/pod/Mojolicious%3A%3APlugin%3A%3AFondation%3A%3ASetup%3A%3AController%3A%3ASetup),
 [Mojolicious::Plugin::Fondation::Workflow](https://metacpan.org/pod/Mojolicious%3A%3APlugin%3A%3AFondation%3A%3AWorkflow)
 

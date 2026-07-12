@@ -51,6 +51,23 @@
           <p class="mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
         </div>
       % }
+      % my $upgradable = stash('upgradable');
+      % if ($upgradable && @$upgradable) {
+        <div class="alert alert-warning mt-2">
+          <strong><%= l('Updates available for these plugins:') %></strong>
+          <ul class="mb-2">
+            % for my $u (@$upgradable) {
+              <li>
+                <code><%= $u->{module_class} %></code>
+                — installed <%= $u->{installed} %>, latest <%= $u->{cpan} %>
+              </li>
+            % }
+          </ul>
+          <p class="mb-0"><%= l('Update them with:') %></p>
+          <pre class="mt-2"><code>cpanm <%= join ' ', map { $_->{module_class} } @$upgradable %></code></pre>
+          <p class="mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
+        </div>
+      % }
       <div class="alert alert-info mt-2">
         <strong><%= l('Tip:') %></strong>
         <%= l('Fondation::Setup is only needed during initial configuration. Once your app is configured, you can simplify your startup script to:') %>

@@ -3,6 +3,7 @@ package Mojolicious::Plugin::Fondation::Setup::Controller::Setup;
 # ABSTRACT: Setup wizard controller — plugin selection, workflow wizard, and .conf generation
 
 use Mojo::Base 'Mojolicious::Controller', -signatures;
+use version;
 
 use Mojo::File 'path';
 use Mojo::Loader;
@@ -102,15 +103,20 @@ sub start ($self) {
     # Store selected plugins in context for conf generation later
     $wf->context->param(_plugins => join(',', @selected));
 
-    # Track which selected plugins are not yet installed
+    # Track which selected plugins are not yet installed, and their versions
     my @not_installed;
+    my %installed_versions;
     for my $class (@selected) {
         my $pm = $class =~ s{::}{/}gr . '.pm';
         unless ($INC{$pm} || eval "require $class; 1") {
             push @not_installed, $class;
+        } else {
+            my $ver = eval { $class->VERSION } // 'unknown';
+            $installed_versions{$class} = $ver;
         }
     }
-    $wf->context->param(_not_installed => join(',', @not_installed)) if @not_installed;
+    $wf->context->param(_not_installed     => join(',', @not_installed)) if @not_installed;
+    $wf->context->param(_installed_versions => join(',', map { "$_=$installed_versions{$_}" } sort keys %installed_versions));
     $factory->save_workflow($wf);
 
     $self->cookie(
@@ -126,6 +132,8 @@ sub start ($self) {
 # ──────────────────────────────────────────────────────────────────────
 
 sub wizard ($self) {
+    $self->render_later;
+
     my $wf_id = $self->cookie('setup_wizard_id');
     my $wf;
 
@@ -146,18 +154,45 @@ sub wizard ($self) {
         %context = %$raw_context;
     }
 
+    my $selected_plugins = [ split /,/, ($context{_plugins} // '') ];
+
     $self->stash(
         wf              => $wf,
-        context         => \%context,
+        context         => \\%context,
         is_done         => $wf->state eq 'setup_done',
         is_review       => $wf->state eq 'setup_review',
         conf_path       => $context{_conf_path},
         config_loaded   => $INC{'Mojolicious/Plugin/Config.pm'} ? 1 : 0,
-        selected_plugins => [ split /,/, ($context{_plugins} // '') ],
+        selected_plugins => $selected_plugins,
         not_installed   => [ split /,/, ($context{_not_installed} // '') ],
     );
 
-    $self->render(template => 'setup/wizard');
+    # Check for upgrades via MetaCPAN
+    my $mc = Mojolicious::Plugin::Fondation::Setup::MetaCPAN->new;
+    $mc->discover_p($self->app)->then(sub ($plugins) {
+        my %cpan_version;
+        $cpan_version{$_->{module_class}} = $_->{version} for @$plugins;
+
+        my @upgradable;
+        for my $class (@$selected_plugins) {
+            my $installed = $self->_installed_version_for($class);
+            next unless defined $installed;
+            my $cpan = $cpan_version{$class} or next;
+            if (version->parse($cpan) > version->parse($installed)) {
+                push @upgradable, {
+                    module_class => $class,
+                    installed    => $installed,
+                    cpan         => $cpan,
+                };
+            }
+        }
+        $self->stash(upgradable => \\@upgradable);
+        $self->render(template => 'setup/wizard');
+    })->catch(sub ($err) {
+        $self->app->log->warn("MetaCPAN upgrade check failed: $err");
+        $self->stash(upgradable => []);
+        $self->render(template => 'setup/wizard');
+    });
 }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -553,6 +588,12 @@ sub _generate_conf ($self, $wf) {
 
     $self->app->log->info("Configuration saved to $conf_path");
     return $conf_path->to_string;
+}
+
+sub _installed_version_for ($self, $class) {
+    my $pm = $class =~ s{::}{/}gr . '.pm';
+    return undef unless $INC{$pm} || eval "require $class; 1";
+    return eval { $class->VERSION } // undef;
 }
 
 1;

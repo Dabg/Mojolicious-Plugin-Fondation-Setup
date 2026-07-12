@@ -3,6 +3,7 @@ package Mojolicious::Plugin::Fondation::Setup::MetaCPAN;
 # ABSTRACT: MetaCPAN discovery for Fondation plugins
 
 use Mojo::Base -base, -signatures;
+use version;
 
 our $VERSION = '0.01';
 
@@ -74,15 +75,24 @@ sub discover_p ($self, $app) {
             $module_class = "Mojolicious::Plugin::$module_class";
             $module_class =~ s/-/::/g;
 
+            my $installed_ver = $self->installed_version($module_class);
+            my $has_upgrade = 0;
+            if (defined $installed_ver && $src->{version}) {
+                $has_upgrade = 1
+                    if version->parse($src->{version}) > version->parse($installed_ver);
+            }
+
             push @plugins, {
-                distribution => $dist,
-                version      => $src->{version} // '',
-                abstract     => $src->{abstract}  // '',
-                author       => $src->{author}    // '',
-                date         => $src->{date}      // '',
-                module_class => $module_class,
-                installed    => $self->is_installed($module_class),
-                dependencies => $self->_fondation_deps($src->{dependency}),
+                distribution      => $dist,
+                version           => $src->{version} // '',
+                abstract          => $src->{abstract}  // '',
+                author            => $src->{author}    // '',
+                date              => $src->{date}      // '',
+                module_class      => $module_class,
+                installed         => defined $installed_ver ? 1 : 0,
+                installed_version => $installed_ver,
+                upgrade_available => $has_upgrade,
+                dependencies      => $self->_fondation_deps($src->{dependency}),
             };
         }
 
@@ -90,17 +100,19 @@ sub discover_p ($self, $app) {
     });
 }
 
-=head2 is_installed
+=head2 installed_version
 
-  my $bool = $mc->is_installed('Mojolicious::Plugin::Fondation::Blog');
+  my $version = $mc->installed_version('Mojolicious::Plugin::Fondation::Blog');
 
-Returns true if the Perl class can be loaded via C<require>.
+Returns the installed version string if the class is loadable and has a
+C<$VERSION>, or C<undef> if not installed.
 
 =cut
 
-sub is_installed ($self, $class) {
-    return 1 if $INC{ $class =~ s{::}{/}gr . '.pm' };
-    return eval "require $class; 1" ? 1 : 0;
+sub installed_version ($self, $class) {
+    my $file = $class =~ s{::}{/}gr . '.pm';
+    return undef unless $INC{$file} || eval "require $class; 1";
+    return eval { $class->VERSION } // undef;
 }
 
 # Extract Fondation-level dependencies from CPAN runtime requirements.

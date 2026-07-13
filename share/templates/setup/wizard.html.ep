@@ -10,6 +10,18 @@
     <p class="text-muted"><%= $c->l($state_meta->{description} // '') %></p>
   </div>
 
+  %# ── Unified alert: plugins to install or update ──
+  % my $missing    = stash('not_installed');
+  % my $upgradable = stash('upgradable');
+  % my @to_install = ((map { $_->{module_class} } @{$upgradable // []}), (@{$missing // []}));
+  % if (@to_install) {
+    <div class="alert alert-warning">
+      <strong><%= l('Run this command to install or update plugins:') %></strong>
+      <pre class="mt-2 mb-0"><code>cpanm <%= join ' ', @to_install %></code></pre>
+      <p class="mt-2 mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
+    </div>
+  % }
+
   % if ($is_done) {
     %# ── Done state ─────────────────────────────────────────────────
     <div class="alert alert-success">
@@ -38,37 +50,6 @@ myapp.pl daemon</code></pre>
           <p class="mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
         </div>
       % }
-      % my $missing = stash('not_installed');
-      % if ($missing && @$missing) {
-        <div class="alert alert-warning mt-2">
-          <strong><%= l('Some selected plugins are not installed:') %></strong>
-          <ul class="mb-2">
-            % for my $m (@$missing) {
-              <li><code><%= $m %></code></li>
-            % }
-          </ul>
-          <p class="mb-0"><%= l('Install them with:') %></p>
-          <pre class="mt-2"><code>cpanm <%= join ' ', @$missing %></code></pre>
-          <p class="mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
-        </div>
-      % }
-      % my $upgradable = stash('upgradable');
-      % if ($upgradable && @$upgradable) {
-        <div class="alert alert-warning mt-2">
-          <strong><%= l('Updates available for these plugins:') %></strong>
-          <ul class="mb-2">
-            % for my $u (@$upgradable) {
-              <li>
-                <code><%= $u->{module_class} %></code>
-                — installed <%= $u->{installed} %>, latest <%= $u->{cpan} %>
-              </li>
-            % }
-          </ul>
-          <p class="mb-0"><%= l('Update them with:') %></p>
-          <pre class="mt-2"><code>cpanm <%= join ' ', map { $_->{module_class} } @$upgradable %></code></pre>
-          <p class="mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
-        </div>
-      % }
       <div class="alert alert-info mt-2">
         <strong><%= l('Tip:') %></strong>
         <%= l('Fondation::Setup is only needed during initial configuration. Once your app is configured, you can simplify your startup script to:') %>
@@ -80,18 +61,6 @@ plugin 'Fondation';</code></pre>
 
   % } elsif ($is_review) {
     %# ── Review state: show all collected context values ────────────
-    % my $missing = stash('not_installed');
-    % if ($missing && @$missing) {
-      <div class="alert alert-warning">
-        <strong><%= l('These plugins are not installed yet and will be skipped:') %></strong>
-        <ul class="mb-2 mt-2">
-          % for my $m (@$missing) {
-            <li><code><%= $m %></code></li>
-          % }
-        </ul>
-        <p class="mb-0"><%= l('Install them with:') %> <code>cpanm <%= join ' ', @$missing %></code></p>
-      </div>
-    % }
     <div class="card mb-4">
       <div class="card-header"><strong><%= l('Review') %></strong></div>
       <div class="card-body">
@@ -206,21 +175,30 @@ plugin 'Fondation';</code></pre>
       </div>
       </form>
     % } else {
-      %# Review state: separate forms since there are no fields
+      %# Review state
       <div class="d-flex gap-2">
-        % my @actions = @{ $wf->actions };
-        % for my $a (@actions) {
-          <form method="post" action="<%= url_for 'setup_execute' %>" class="d-inline">
-            %= csrf_field
-            <input type="hidden" name="action" value="<%= $a->{name} %>">
-            <button type="submit"
-                    class="btn btn-<%= $a->{color} // 'primary' %>">
-              % if ($a->{icon}) {
-                <i class="bi bi-<%= $a->{icon} %>"></i>
-              % }
-              <%= $c->l($a->{label}) %>
-            </button>
-          </form>
+        % if (@to_install) {
+          %# Plugins to install — retry link with selected plugins in URL
+          % my $sel_param = join(',', @{$selected_plugins // []});
+          <a href="<%= url_for('setup_plugins')->query(selected => $sel_param) %>"
+             class="btn btn-primary">
+            <%= l('I have installed the plugins, retry') %>
+          </a>
+        % } else {
+          % my @actions = @{ $wf->actions };
+          % for my $a (@actions) {
+            <form method="post" action="<%= url_for 'setup_execute' %>" class="d-inline">
+              %= csrf_field
+              <input type="hidden" name="action" value="<%= $a->{name} %>">
+              <button type="submit"
+                      class="btn btn-<%= $a->{color} // 'primary' %>">
+                % if ($a->{icon}) {
+                  <i class="bi bi-<%= $a->{icon} %>"></i>
+                % }
+                <%= $c->l($a->{label}) %>
+              </button>
+            </form>
+          % }
         % }
         <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto">
           <%= l('Reset') %>

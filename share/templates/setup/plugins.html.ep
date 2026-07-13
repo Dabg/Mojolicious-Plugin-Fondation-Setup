@@ -32,8 +32,14 @@
                 % if ($p->{installed_version}) {
                   <span class="badge bg-light text-dark ms-1">v<%= $p->{installed_version} %></span>
                 % }
+                % if ($p->{cpan_version}) {
+                  <span class="badge bg-light text-dark ms-1">CPAN v<%= $p->{cpan_version} %></span>
+                % }
                 % if ($p->{upgrade_available}) {
-                  <span class="badge bg-warning text-dark ms-1">CPAN v<%= $p->{cpan_version} %> ↑</span>
+                  <span class="badge bg-warning text-dark ms-1">Update</span>
+                % }
+                % if ($p->{release_pending}) {
+                  <span class="badge bg-danger ms-1">Release</span>
                 % }
               % } else {
                 <span class="badge bg-secondary ms-2"><%= l('CPAN') %></span>
@@ -42,8 +48,14 @@
                   % if ($p->{installed_version}) {
                     <span class="badge bg-light text-dark ms-1">v<%= $p->{installed_version} %></span>
                   % }
+                  % if ($p->{cpan_version}) {
+                    <span class="badge bg-light text-dark ms-1">CPAN v<%= $p->{cpan_version} %></span>
+                  % }
                   % if ($p->{upgrade_available}) {
-                    <span class="badge bg-warning text-dark ms-1">v<%= $p->{version} %> ↑</span>
+                    <span class="badge bg-warning text-dark ms-1">Update</span>
+                  % }
+                  % if ($p->{release_pending}) {
+                    <span class="badge bg-danger ms-1">Release</span>
                   % }
                 % } else {
                   <span class="badge bg-warning text-dark ms-2"><%= l('Not installed') %></span>

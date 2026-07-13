@@ -27,12 +27,16 @@ sub plugins ($self) {
         my $conf = do($conf_path->to_string);
         if ($conf && $conf->{Fondation} && $conf->{Fondation}{dependencies}) {
             for my $dep (@{$conf->{Fondation}{dependencies}}) {
-                # New format: plain strings (config is at root level)
                 my $name = ref $dep ? (keys %$dep)[0] : $dep;
                 $name = "Mojolicious::Plugin::$name" unless $name =~ /^Mojolicious::/;
                 $already_selected{$name} = 1;
             }
         }
+    }
+
+    # Pre-select plugins passed via ?selected= from the retry link
+    if (my $sel = $self->param('selected')) {
+        $already_selected{$_} = 1 for split /,/, $sel;
     }
 
     my $mc = Mojolicious::Plugin::Fondation::Setup::MetaCPAN->new;
@@ -42,17 +46,21 @@ sub plugins ($self) {
         my %dev_by_class = map { $_->{module_class} => $_ } @$dev;
         for my $p (@$plugins) {
             $p->{is_dev} = 0;
+            $p->{cpan_version} = $p->{version};
             if (my $d = $dev_by_class{$p->{module_class}}) {
                 # Local wins for version/installed, keep CPAN metadata
                 $p->{is_dev}            = 1;
                 $p->{installed}         = 1;
                 $p->{installed_version} = $d->{installed_version};
-                $p->{cpan_version}      = $p->{version};
-                $p->{upgrade_available} = 0;
-                if ($d->{installed_version} && $p->{version}
-                    && version->parse($p->{version}) > version->parse($d->{installed_version})) {
-                    $p->{upgrade_available} = 1;
-                }
+            }
+            # Compare installed vs CPAN versions
+            $p->{upgrade_available} = 0;
+            $p->{release_pending}   = 0;
+            if ($p->{installed_version} && $p->{version}) {
+                my $local = version->parse($p->{installed_version});
+                my $cpan  = version->parse($p->{version});
+                $p->{upgrade_available} = 1 if $cpan  > $local;
+                $p->{release_pending}   = 1 if $local > $cpan;
             }
         }
         # Add dev-only plugins not on MetaCPAN
@@ -89,16 +97,19 @@ sub discover ($self) {
         my %dev_by_class = map { $_->{module_class} => $_ } @$dev;
         for my $p (@$plugins) {
             $p->{is_dev} = 0;
+            $p->{cpan_version} = $p->{version};
             if (my $d = $dev_by_class{$p->{module_class}}) {
                 $p->{is_dev}            = 1;
                 $p->{installed}         = 1;
                 $p->{installed_version} = $d->{installed_version};
-                $p->{cpan_version}      = $p->{version};
-                $p->{upgrade_available} = 0;
-                if ($d->{installed_version} && $p->{version}
-                    && version->parse($p->{version}) > version->parse($d->{installed_version})) {
-                    $p->{upgrade_available} = 1;
-                }
+            }
+            $p->{upgrade_available} = 0;
+            $p->{release_pending}   = 0;
+            if ($p->{installed_version} && $p->{version}) {
+                my $local = version->parse($p->{installed_version});
+                my $cpan  = version->parse($p->{version});
+                $p->{upgrade_available} = 1 if $cpan  > $local;
+                $p->{release_pending}   = 1 if $local > $cpan;
             }
         }
         my %seen_cpan = map { $_->{module_class} => 1 } @$plugins;
@@ -163,9 +174,11 @@ sub start ($self) {
         }
     }
 
-    # Collect setup parameters from installed plugins only
+    # Collect setup parameters from installed plugins only.
+    # If any plugin is not installed, skip config — the wizard will show
+    # install instructions first. Config can be done after installation.
     my $conf_config = $self->_parse_conf_for_plugins(@selected);
-    my $params      = $self->_collect_setup_params($conf_config, @installed);
+    my $params      = @not_installed ? [] : $self->_collect_setup_params($conf_config, @installed);
 
     unless (@$params || @not_installed) {
         $self->flash(error => 'No configurable parameters found in selected plugins.');
@@ -271,7 +284,7 @@ sub wizard ($self) {
                 };
             }
         }
-        $self->stash(upgradable => \\@upgradable);
+        $self->stash(upgradable => \@upgradable);
         $self->render(template => 'setup/wizard');
     })->catch(sub ($err) {
         $self->app->log->debug("MetaCPAN upgrade check failed: $err");

@@ -4,8 +4,6 @@ package Mojolicious::Plugin::Fondation::Setup;
 
 use Mojo::Base 'Mojolicious::Plugin', -signatures;
 
-our $VERSION = '0.01';
-
 sub fondation_meta {
     return {
         dependencies => [

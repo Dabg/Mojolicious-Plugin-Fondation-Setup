@@ -27,7 +27,8 @@ sub plugins ($self) {
         my $conf = do($conf_path->to_string);
         if ($conf && $conf->{Fondation} && $conf->{Fondation}{dependencies}) {
             for my $dep (@{$conf->{Fondation}{dependencies}}) {
-                my $name = ref $dep eq 'HASH' ? (keys %$dep)[0] : $dep;
+                # New format: plain strings (config is at root level)
+                my $name = ref $dep ? (keys %$dep)[0] : $dep;
                 $name = "Mojolicious::Plugin::$name" unless $name =~ /^Mojolicious::/;
                 $already_selected{$name} = 1;
             }
@@ -158,7 +159,7 @@ sub wizard ($self) {
 
     $self->stash(
         wf              => $wf,
-        context         => \\%context,
+        context         => \%context,
         is_done         => $wf->state eq 'setup_done',
         is_review       => $wf->state eq 'setup_review',
         conf_path       => $context{_conf_path},
@@ -297,14 +298,12 @@ sub _parse_conf_for_plugins ($self, @classes) {
     return \%plugin_config unless -f $conf_path;
 
     my $conf = do($conf_path->to_string);
-    return \%plugin_config unless $conf && $conf->{Fondation} && $conf->{Fondation}{dependencies};
+    return \%plugin_config unless $conf;
 
-    for my $dep (@{$conf->{Fondation}{dependencies}}) {
-        if (ref $dep eq 'HASH') {
-            my ($name, $cfg) = %$dep;
-            $name = "Mojolicious::Plugin::$name" unless $name =~ /^Mojolicious::/;
-            $plugin_config{$name} = $cfg;
-        }
+    for my $class (@classes) {
+        (my $short = $class) =~ s/^Mojolicious::Plugin:://;
+        my $cfg = $conf->{$short};
+        $plugin_config{$class} = $cfg if $cfg && ref $cfg eq 'HASH';
     }
     return \%plugin_config;
 }
@@ -559,20 +558,21 @@ sub _generate_conf ($self, $wf) {
         }
     }
 
-    # Build Fondation wrapper
+    # Build Fondation wrapper — dependencies as plain strings (no config)
     my @deps;
     for my $plugin (@plugins) {
         (my $short = $plugin) =~ s/^Mojolicious::Plugin:://;
-        if (my $cfg = $plugin_config{$plugin}) {
-            push @deps, { $short => $cfg };
-        } else {
-            push @deps, $short;
-        }
+        push @deps, $short;
     }
 
-    my $short = 'Fondation';
-    $short =~ s/^Mojolicious::Plugin:://;
-    my %conf = ( $short => { dependencies => \@deps } );
+    my %conf = ( Fondation => { dependencies => \@deps } );
+
+    # Add each plugin's config at root level so $app->config->{$short} works
+    for my $plugin (@plugins) {
+        next unless $plugin_config{$plugin};
+        (my $short = $plugin) =~ s/^Mojolicious::Plugin:://;
+        $conf{$short} = $plugin_config{$plugin};
+    }
 
     my $moniker   = $self->app->moniker;
     my $conf_path = $self->app->home->child("$moniker.conf");
@@ -597,3 +597,258 @@ sub _installed_version_for ($self, $class) {
 }
 
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Mojolicious::Plugin::Fondation::Setup::Controller::Setup - Setup wizard controller — plugin selection, workflow wizard, and .conf generation
+
+=head1 SYNOPSIS
+
+    # Routes are registered automatically by Fondation::Setup:
+    #   GET  /setup          → wizard()
+    #   GET  /setup/plugins  → plugins()
+    #   GET  /setup/discover → discover()
+    #   POST /setup/start    → start()
+    #   POST /setup/execute  → execute()
+    #   GET  /setup/reset    → reset()
+
+=head1 DESCRIPTION
+
+This controller implements the Fondation setup wizard — a step-by-step
+interface for discovering, selecting, and configuring Fondation plugins.
+It fetches available plugins from MetaCPAN, lets the user pick which ones
+to install, walks them through configuration parameters via a Workflow
+state machine, and generates the application's C<.conf> file.
+
+The wizard is designed to be the first thing a user sees after installing
+a Fondation-based application. It can also be re-run later to add or
+upgrade plugins.
+
+=head1 ACTIONS
+
+=head2 plugins
+
+    GET /setup/plugins
+
+Renders the plugin selection page. Reads the existing C<.conf> file to
+pre-select plugins that are already configured, fetches the full list of
+Fondation plugins from MetaCPAN (async), and passes both to the
+C<setup/plugins> template.
+
+Stash keys:
+
+=over 4
+
+=item * C<plugins> — arrayref of plugin metadata from MetaCPAN
+
+=item * C<already_selected> — hashref of fully-qualified class names
+already present in the config
+
+=back
+
+=head2 discover
+
+    GET /setup/discover
+
+Async JSON endpoint that returns the full list of Fondation plugins
+discovered on MetaCPAN. Used by the plugin selection UI to populate
+the list dynamically.
+
+Response: C<{ plugins => [...] }> on success, C<{ error => "..." }>
+with status 500 on failure.
+
+=head2 start
+
+    POST /setup/start
+
+Builds a Workflow state machine from the selected plugins' configuration
+parameters. Expects C<selected_plugins> (array of fully-qualified class
+names) in the POST body.
+
+Flow:
+
+=over 4
+
+=item 1. Reads each selected plugin's C<fondation_meta → setup → parameters>
+
+=item 2. Resolves current values from the existing C<.conf> file if present
+
+=item 3. Builds a YAML workflow data structure with one state per plugin
+
+=item 4. Registers the workflow with C<Workflow::Factory> (in-memory)
+
+=item 5. Checks which selected plugins are not yet installed
+
+=item 6. Stores the workflow ID in a cookie (C<setup_wizard_id>)
+
+=item 7. Redirects to C</setup> (the wizard)
+
+=back
+
+=head2 wizard
+
+    GET /setup
+
+Renders the setup wizard page. Loads the workflow identified by the
+C<setup_wizard_id> cookie. If no workflow exists yet, redirects to
+C</setup/plugins>.
+
+Also performs an async MetaCPAN check for upgradable plugins — compares
+installed versions against CPAN versions and flags any that are out of
+date.
+
+Stash keys:
+
+=over 4
+
+=item * C<wf> — the workflow object
+
+=item * C<context> — workflow context hashref (user-provided values)
+
+=item * C<is_done> — true when state is C<setup_done>
+
+=item * C<is_review> — true when state is C<setup_review>
+
+=item * C<conf_path> — path to the generated C<.conf> file (when done)
+
+=item * C<config_loaded> — true if C<Mojolicious::Plugin::Config> is loaded
+
+=item * C<selected_plugins> — arrayref of selected plugin class names
+
+=item * C<not_installed> — arrayref of plugins not yet installed
+
+=item * C<upgradable> — arrayref of plugins with newer versions on CPAN
+
+=back
+
+=head2 execute
+
+    POST /setup/execute
+
+Processes a workflow action (C<next>, C<back>, C<save>). Reads form
+parameters matching the current state's parameter keys and stores them
+in the workflow context. On C<save> (transition to C<setup_done>),
+generates the C<.conf> file via C<_generate_conf>.
+
+Expects:
+
+=over 4
+
+=item * C<action> — the workflow action name to execute
+
+=item * Parameter values matching the current state's C<parameters> keys
+
+=back
+
+=head2 reset
+
+    GET /setup/reset
+
+Clears the C<setup_wizard_id> cookie and redirects back to the plugin
+selection page. Use this to start the wizard over from scratch.
+
+=head1 INTERNAL METHODS
+
+These methods are not exposed as routes but implement the core logic.
+
+=head2 _persister_file_dir
+
+    my $dir = $self->_persister_file_dir;
+
+Returns the directory path for the Workflow::Persister::File storage.
+Reads C<persister_file_dir> from C<Fondation::Workflow>'s merged config
+in the registry, defaulting to C<data/setup>.
+
+=head2 _resolve_config_value
+
+    my $value = $self->_resolve_config_value($config, $key_path);
+
+Resolves a dotted key path within a config hash. Handles flattened array
+notation (e.g. C<backends.main.dsn> where C<backends> is an arrayref of
+C<< name => { dsn => '...' } >> pairs). Keys prefixed with C<+> are
+stripped before resolution.
+
+=head2 _parse_conf_for_plugins
+
+    my $configs = $self->_parse_conf_for_plugins(@classes);
+
+Parses the existing C<.conf> file and extracts per-plugin configuration
+hashes for the given class names. Returns a hashref keyed by
+fully-qualified class name.
+
+=head2 _collect_setup_params
+
+    my $params = $self->_collect_setup_params($conf_config, @classes);
+
+Loads each plugin's C<fondation_meta → setup → parameters> and resolves
+current values from the config file (if available). Returns an arrayref
+of parameter hashes ready for the workflow builder.
+
+Each parameter hash contains: C<plugin_short>, C<plugin_label>,
+C<plugin_desc>, C<key>, C<label>, C<type>, C<default>, C<current>,
+C<required>, and optionally C<min>, C<max>, C<placeholder>, C<options>.
+
+=head2 _build_workflow_data
+
+    my $yaml_data = $self->_build_workflow_data($params);
+
+Builds a complete Workflow data structure from collected parameters.
+Creates one state per plugin group, a C<setup_review> state, and a
+terminal C<setup_done> state. Includes C<next>, C<back>, and C<save>
+actions with Fondation metadata for UI rendering (labels, colors, icons).
+
+=head2 _plugin_state_name
+
+    my $state = $self->_plugin_state_name($plugin_short);
+
+Derives a workflow state name from a plugin short name — lowercased,
+double-colons replaced with underscores, non-alphanumeric chars stripped,
+prefixed with C<setup_>. Example: C<Fondation::Model::DBIx::Async>
+becomes C<setup_model_dbix_async>.
+
+=head2 _generate_conf
+
+    my $conf_path = $self->_generate_conf($wf);
+
+Generates the application C<.conf> file from all values collected in the
+workflow context. Builds a hash with:
+
+=over 4
+
+=item * C<Fondation → dependencies> — array of plugin short names
+
+=item * Root-level keys per plugin with their configured values
+
+=item * Dotted keys expanded into nested hashes; C<+> prefix keys use
+flattened array notation
+
+=back
+
+Writes the file using C<Data::Dumper> and returns its path.
+
+=head2 _installed_version_for
+
+    my $version = $self->_installed_version_for($class);
+
+Returns the installed version of a plugin class, or C<undef> if not
+installed. Used to compare against MetaCPAN versions for upgrade
+detection.
+
+=head1 AUTHOR
+
+Daniel Brosseau <dab@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2026 by Daniel Brosseau.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

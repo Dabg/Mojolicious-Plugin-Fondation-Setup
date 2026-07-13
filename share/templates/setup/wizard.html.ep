@@ -27,8 +27,9 @@
         </ul>
       % }
       % if (stash('config_loaded')) {
-        <p><%= l('Run the following command to apply the new configuration:') %></p>
-        <pre class="mt-2"><code>myapp.pl fondation refresh</code></pre>
+        <p><%= l('Run the following commands to apply and start:') %></p>
+        <pre class="mt-2"><code>myapp.pl fondation refresh
+myapp.pl daemon</code></pre>
       % } else {
         <div class="alert alert-warning mt-2">
           <strong><%= l('Important:') %></strong>

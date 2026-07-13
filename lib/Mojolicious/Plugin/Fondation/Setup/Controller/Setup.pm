@@ -37,11 +37,43 @@ sub plugins ($self) {
 
     my $mc = Mojolicious::Plugin::Fondation::Setup::MetaCPAN->new;
     $mc->discover_p($self->app)->then(sub ($plugins) {
+        # Merge locally-developed plugins. Local version + CPAN metadata.
+        my $dev = $self->_discover_dev_plugins;
+        my %dev_by_class = map { $_->{module_class} => $_ } @$dev;
+        for my $p (@$plugins) {
+            $p->{is_dev} = 0;
+            if (my $d = $dev_by_class{$p->{module_class}}) {
+                # Local wins for version/installed, keep CPAN metadata
+                $p->{is_dev}            = 1;
+                $p->{installed}         = 1;
+                $p->{installed_version} = $d->{installed_version};
+                $p->{cpan_version}      = $p->{version};
+                $p->{upgrade_available} = 0;
+                if ($d->{installed_version} && $p->{version}
+                    && version->parse($p->{version}) > version->parse($d->{installed_version})) {
+                    $p->{upgrade_available} = 1;
+                }
+            }
+        }
+        # Add dev-only plugins not on MetaCPAN
+        my %seen_cpan = map { $_->{module_class} => 1 } @$plugins;
+        for my $d (@$dev) {
+            next if $seen_cpan{$d->{module_class}};
+            push @$plugins, $d;
+        }
         $self->stash(plugins => $plugins, already_selected => \%already_selected);
         $self->render(template => 'setup/plugins');
     })->catch(sub ($err) {
-        $self->stash(error => "Failed to fetch plugins: $err", already_selected => \%already_selected);
-        $self->render(template => 'setup/plugins');
+        # MetaCPAN failed — still show local plugins if available
+        my $dev = $self->_discover_dev_plugins;
+        if (@$dev) {
+            $_->{is_dev} = 1 for @$dev;
+            $self->stash(plugins => $dev, already_selected => \%already_selected);
+            $self->render(template => 'setup/plugins');
+        } else {
+            $self->stash(error => "Failed to fetch plugins: $err", already_selected => \%already_selected);
+            $self->render(template => 'setup/plugins');
+        }
     });
 }
 
@@ -53,9 +85,36 @@ sub discover ($self) {
     $self->render_later;
     my $mc = Mojolicious::Plugin::Fondation::Setup::MetaCPAN->new;
     $mc->discover_p($self->app)->then(sub ($plugins) {
+        my $dev = $self->_discover_dev_plugins;
+        my %dev_by_class = map { $_->{module_class} => $_ } @$dev;
+        for my $p (@$plugins) {
+            $p->{is_dev} = 0;
+            if (my $d = $dev_by_class{$p->{module_class}}) {
+                $p->{is_dev}            = 1;
+                $p->{installed}         = 1;
+                $p->{installed_version} = $d->{installed_version};
+                $p->{cpan_version}      = $p->{version};
+                $p->{upgrade_available} = 0;
+                if ($d->{installed_version} && $p->{version}
+                    && version->parse($p->{version}) > version->parse($d->{installed_version})) {
+                    $p->{upgrade_available} = 1;
+                }
+            }
+        }
+        my %seen_cpan = map { $_->{module_class} => 1 } @$plugins;
+        for my $d (@$dev) {
+            next if $seen_cpan{$d->{module_class}};
+            push @$plugins, $d;
+        }
         $self->render(json => { plugins => $plugins });
     })->catch(sub ($err) {
-        $self->render(json => { error => "$err" }, status => 500);
+        my $dev = $self->_discover_dev_plugins;
+        if (@$dev) {
+            $_->{is_dev} = 1 for @$dev;
+            $self->render(json => { plugins => $dev });
+        } else {
+            $self->render(json => { error => "$err" }, status => 500);
+        }
     });
 }
 
@@ -67,11 +126,48 @@ sub start ($self) {
     my @selected = @{ $self->every_param('selected_plugins') // [] };
     return $self->reply->not_found unless @selected;
 
-    # Collect setup parameters from selected plugins' fondation_meta
-    my $conf_config = $self->_parse_conf_for_plugins(@selected);
-    my $params      = $self->_collect_setup_params($conf_config, @selected);
+    # Separate installed from not-yet-installed plugins.
+    # Only installed plugins can have their fondation_meta loaded.
+    my (@installed, @not_installed);
+    my %installed_versions;
+    for my $class (@selected) {
+        my $pm = $class =~ s{::}{/}gr . '.pm';
+        if ($INC{$pm} || eval "require $class; 1") {
+            push @installed, $class;
+            my $ver = eval { $class->VERSION } // 'unknown';
+            $installed_versions{$class} = $ver;
+        } elsif ($self->_is_dev_plugin($class)) {
+            # Plugin is in dev_plugins_dir but not in @INC.
+            # Add its lib/ to @INC so that its own use/require statements work,
+            # then load it so fondation_meta is available.
+            my $dev_dir = $self->_dev_plugins_dir;
+            (my $rel = "$pm") =~ s{::}{/}g;
+            my @found = glob("$dev_dir/Mojolicious-Plugin-Fondation-*/lib/$rel");
+            if (@found && -f $found[0]) {
+                # The lib/ dir is two levels up from the .pm file
+                # e.g. .../Mojolicious-Plugin-Fondation-Model-DBIx-Async/lib/
+                my $lib_dir = $found[0];
+                $lib_dir =~ s{/lib/.*}{/lib};
+                unshift @INC, $lib_dir if -d $lib_dir;
+                eval { require "$found[0]"; 1 };
+                if (!$@) {
+                    push @installed, $class;
+                    my $ver = eval { $class->VERSION } // 'unknown';
+                    $installed_versions{$class} = $ver;
+                    next;
+                }
+            }
+            push @not_installed, $class;
+        } else {
+            push @not_installed, $class;
+        }
+    }
 
-    unless (@$params) {
+    # Collect setup parameters from installed plugins only
+    my $conf_config = $self->_parse_conf_for_plugins(@selected);
+    my $params      = $self->_collect_setup_params($conf_config, @installed);
+
+    unless (@$params || @not_installed) {
         $self->flash(error => 'No configurable parameters found in selected plugins.');
         return $self->redirect_to('setup_plugins');
     }
@@ -104,18 +200,6 @@ sub start ($self) {
     # Store selected plugins in context for conf generation later
     $wf->context->param(_plugins => join(',', @selected));
 
-    # Track which selected plugins are not yet installed, and their versions
-    my @not_installed;
-    my %installed_versions;
-    for my $class (@selected) {
-        my $pm = $class =~ s{::}{/}gr . '.pm';
-        unless ($INC{$pm} || eval "require $class; 1") {
-            push @not_installed, $class;
-        } else {
-            my $ver = eval { $class->VERSION } // 'unknown';
-            $installed_versions{$class} = $ver;
-        }
-    }
     $wf->context->param(_not_installed     => join(',', @not_installed)) if @not_installed;
     $wf->context->param(_installed_versions => join(',', map { "$_=$installed_versions{$_}" } sort keys %installed_versions));
     $factory->save_workflow($wf);
@@ -190,7 +274,7 @@ sub wizard ($self) {
         $self->stash(upgradable => \\@upgradable);
         $self->render(template => 'setup/wizard');
     })->catch(sub ($err) {
-        $self->app->log->warn("MetaCPAN upgrade check failed: $err");
+        $self->app->log->debug("MetaCPAN upgrade check failed: $err");
         $self->stash(upgradable => []);
         $self->render(template => 'setup/wizard');
     });
@@ -320,7 +404,7 @@ sub _collect_setup_params ($self, $conf_config, @classes) {
             $class->can('fondation_meta') ? $class->fondation_meta : undef;
         };
         unless ($meta) {
-            $self->app->log->warn("Setup: no fondation_meta for $class: $@");
+            $self->app->log->debug("Setup: no fondation_meta for $class: $@");
             next;
         }
         my $setup = $meta->{setup} or do {
@@ -391,6 +475,37 @@ sub _build_workflow_data ($self, $params) {
     # Build states
     my @states;
     my $prev_state;
+
+    # No configurable parameters — go straight to review
+    unless (@plugin_groups) {
+        return {
+            type          => 'setup',
+            initial_state => 'setup_review',
+            persister     => 'SetupFile',
+            fondation     => {
+                label       => 'Application Setup',
+                description => 'Configure your application',
+            },
+            state => [
+                {
+                    name      => 'setup_review',
+                    fondation => { label => 'Review' },
+                    action    => [
+                        { name => 'save', resulting_state => 'setup_done' },
+                    ],
+                },
+                {
+                    name      => 'setup_done',
+                    fondation => { label => 'Done', color => 'success', icon => 'check-circle' },
+                    action    => [],
+                },
+            ],
+            action => [
+                { name => 'save', class => 'Workflow::Action::Null',
+                  fondation => { label => 'Save Configuration', color => 'success', icon => 'check', group => 'main' } },
+            ],
+        };
+    }
 
     for (my $i = 0; $i < @plugin_groups; $i++) {
         my $group   = $plugin_groups[$i];
@@ -594,6 +709,115 @@ sub _installed_version_for ($self, $class) {
     my $pm = $class =~ s{::}{/}gr . '.pm';
     return undef unless $INC{$pm} || eval "require $class; 1";
     return eval { $class->VERSION } // undef;
+}
+
+# Read dev_plugins_dir from the Fondation manager config (not app config).
+sub _dev_plugins_dir ($self) {
+    my $manager = $self->app->manager;
+    return $manager ? ($manager->config->{dev_plugins_dir} // undef) : undef;
+}
+
+# Check whether a plugin class lives under dev_plugins_dir.
+# Returns true if the .pm file is found in any scanned dev subdirectory.
+sub _is_dev_plugin ($self, $class) {
+    my $dev_dir = $self->_dev_plugins_dir
+        or return 0;
+
+    (my $rel = "$class.pm") =~ s{::}{/}g;
+
+    my @dev = glob("$dev_dir/Mojolicious-Plugin-Fondation-*/lib/$rel");
+    return @dev > 0;
+}
+
+# Scan dev_plugins_dir for locally-developed Fondation plugins.
+# Returns an arrayref of plugin hashes (same shape as discover_p).
+sub _discover_dev_plugins ($self) {
+    my $dev_dir = $self->_dev_plugins_dir
+        or return [];
+
+    my @plugins;
+    my @dirs = glob("$dev_dir/Mojolicious-Plugin-Fondation-*");
+    for my $dir (@dirs) {
+        next unless -d $dir;
+        (my $dist = $dir) =~ s{.*/}{};  # Mojolicious-Plugin-Fondation-Foo-Bar
+
+        # Derive module class from directory name
+        (my $module_class = $dist) =~ s/^Mojolicious-Plugin-//;
+        $module_class = "Mojolicious::Plugin::$module_class";
+        $module_class =~ s/-/::/g;
+
+        # Dev plugins are always installed; loading is deferred to start().
+        # Extract metadata from source without triggering register().
+        my ($abstract, $version, $deps) = ('', '', []);
+        my $pm = "$module_class.pm";
+        $pm =~ s{::}{/}g;
+        my $pm_path = "$dir/lib/$pm";
+        if (-f $pm_path) {
+            open my $fh, '<', $pm_path or next;
+            my $src = do { local $/; <$fh> };
+            close $fh;
+
+            # Extract version: try $VERSION in source, then dist.ini
+            if ($src =~ /\$VERSION\s*=\s*['"]?([^'";]+)/) {
+                $version = $1;
+            } else {
+                my $ini = "$dir/dist.ini";
+                if (-f $ini) {
+                    open my $fh2, '<', $ini or next;
+                    while (my $line = <$fh2>) {
+                        if ($line =~ /^version\s*=\s*(\S+)/) {
+                            $version = $1;
+                            last;
+                        }
+                    }
+                    close $fh2;
+                }
+            }
+
+            # Extract # ABSTRACT: comment
+            if ($src =~ /^\s*#\s*ABSTRACT:\s*(.+)$/m) {
+                $abstract = $1;
+            }
+
+            # Safely eval the fondation_meta sub in a temp package
+            if ($src =~ /(sub\s+fondation_meta\s*\{)/) {
+                my $pos  = $-[0] + length($1);
+                my $depth = 1;
+                my $end   = $pos;
+                while ($depth > 0 && $end < length($src)) {
+                    my $c = substr($src, $end, 1);
+                    $depth++ if $c eq '{';
+                    $depth-- if $c eq '}';
+                    $end++;
+                }
+                my $body = substr($src, $-[0], $end - $-[0]);
+                my $meta = eval qq{package _FondationDevMeta; $body; _FondationDevMeta::fondation_meta();};
+                if ($meta && !$@ && ref $meta eq 'HASH') {
+                    $deps = $meta->{dependencies} // [];
+                    $abstract = $meta->{setup}{description} // '' unless $abstract;
+                }
+            }
+
+            # Convert short dep names to full class names
+            $deps = [ map { /^Mojolicious::Plugin::/ ? $_ : "Mojolicious::Plugin::$_" } @$deps ];
+        }
+        my $installed = 1;
+
+        push @plugins, {
+            distribution      => $dist,
+            version           => $version,
+            abstract          => $abstract,
+            author            => '',
+            date              => '',
+            module_class      => $module_class,
+            installed         => $installed,
+            installed_version => $version,
+            upgrade_available => 0,
+            dependencies      => $deps,
+            is_dev            => 1,
+        };
+    }
+    return \@plugins;
 }
 
 1;

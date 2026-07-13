@@ -80,6 +80,18 @@ plugin 'Fondation';</code></pre>
 
   % } elsif ($is_review) {
     %# ── Review state: show all collected context values ────────────
+    % my $missing = stash('not_installed');
+    % if ($missing && @$missing) {
+      <div class="alert alert-warning">
+        <strong><%= l('These plugins are not installed yet and will be skipped:') %></strong>
+        <ul class="mb-2 mt-2">
+          % for my $m (@$missing) {
+            <li><code><%= $m %></code></li>
+          % }
+        </ul>
+        <p class="mb-0"><%= l('Install them with:') %> <code>cpanm <%= join ' ', @$missing %></code></p>
+      </div>
+    % }
     <div class="card mb-4">
       <div class="card-header"><strong><%= l('Review') %></strong></div>
       <div class="card-body">

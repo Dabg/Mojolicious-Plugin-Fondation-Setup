@@ -5,8 +5,6 @@ package Mojolicious::Plugin::Fondation::Setup::MetaCPAN;
 use Mojo::Base -base, -signatures;
 use version;
 
-our $VERSION = '0.01';
-
 has base_url => 'https://fastapi.metacpan.org/v1';
 
 =head1 NAME

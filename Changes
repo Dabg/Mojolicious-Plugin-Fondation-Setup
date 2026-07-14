@@ -1,6 +1,8 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+
+0.07      2026-07-14 17:24:15+02:00 Europe/Paris
     - Fix dependency cascade: aggressive uncheck + dev deps extraction
     - use Foundation::SessionStore dependency to pass the 4kb limit via cookies
 

@@ -1,6 +1,7 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+    - delete 'Mojolicious::Plugin::Fondation::Workflow' dependency
 
 0.05      2026-07-14 13:34:04+02:00 Europe/Paris
     - Rewrite Setup plugin: drop Workflow.pm too complex for this case,

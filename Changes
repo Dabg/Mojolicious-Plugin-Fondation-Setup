@@ -1,6 +1,8 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+
+0.06      2026-07-14 13:38:09+02:00 Europe/Paris
     - delete 'Mojolicious::Plugin::Fondation::Workflow' dependency
 
 0.05      2026-07-14 13:34:04+02:00 Europe/Paris

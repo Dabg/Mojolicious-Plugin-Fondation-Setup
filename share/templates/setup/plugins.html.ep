@@ -1,5 +1,5 @@
 % layout (stash('layout') // 'main');
-% title 'Plugin Selection';
+% title l('Plugin Selection');
 
 <style>
   .plugin-selected        { background-color: #d4edda !important; }  /* green  — directly selected */
@@ -8,8 +8,8 @@
 </style>
 
 <div class="container mt-4">
-  <h2>Available Fondation Plugins</h2>
-  <p class="text-muted">Select the plugins to configure. Dependencies are auto-selected.</p>
+  <h2><%= l('Available Fondation Plugins') %></h2>
+  <p class="text-muted"><%= l('Select the plugins to configure. Dependencies are auto-selected.') %></p>
 
   % if (my $err = stash 'error') {
     <div class="alert alert-danger"><%= $err %></div>
@@ -40,7 +40,7 @@
               <br><small class="text-muted"><%= $p->{abstract} %></small>
               % if (@$deps) {
                 <br><small class="text-muted">
-                  Depends on:
+                  <%= l('Depends on:') %>
                   % for my $d (@$deps) {
                     <code><%= $d %></code><%= $d eq $deps->[-1] ? '' : ', ' %>
                   % }
@@ -52,14 +52,14 @@
       </div>
 
       <div class="d-flex gap-2">
-        <button type="submit" class="btn btn-primary">Continue</button>
-        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger">Reset</a>
+        <button type="submit" class="btn btn-primary"><%= l('Continue') %></button>
+        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger"><%= l('Reset') %></a>
       </div>
     </form>
   % } elsif ($plugins) {
-    <div class="alert alert-info">No Fondation plugins found on MetaCPAN.</div>
+    <div class="alert alert-info"><%= l('No Fondation plugins found on MetaCPAN.') %></div>
   % } else {
-    <p class="text-muted text-center py-5">Fetching plugin list from MetaCPAN...</p>
+    <p class="text-muted text-center py-5"><%= l('Fetching plugin list from MetaCPAN...') %></p>
   % }
 </div>
 

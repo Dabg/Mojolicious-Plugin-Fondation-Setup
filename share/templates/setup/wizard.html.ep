@@ -1,15 +1,15 @@
 % layout 'main';
-% title 'Application Setup';
+% title l('Application Setup');
 
 <div class="container mt-4">
-  <h2>Application Setup</h2>
+  <h2><%= l('Application Setup') %></h2>
 
   %# ── Install command alert ────────────────────────────────────────
   % if (my $cmd = stash('install_command')) {
     <div class="alert alert-warning">
-      <strong>Run this command to install or update plugins:</strong>
+      <strong><%= l('Run this command to install or update plugins:') %></strong>
       <pre class="mt-2 mb-0"><code>cpanm <%= $cmd %></code></pre>
-      <p class="mt-2 mb-0"><strong>Then run:</strong> <code>myapp.pl fondation refresh</code></p>
+      <p class="mt-2 mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
     </div>
   % }
 
@@ -17,10 +17,10 @@
   % my $unresolvable = stash('unresolvable');
   % if ($unresolvable && @$unresolvable) {
     <div class="alert alert-danger">
-      <strong>Unresolvable dependencies:</strong>
+      <strong><%= l('Unresolvable dependencies:') %></strong>
       <ul class="mb-0 mt-2">
         % for my $u (@$unresolvable) {
-          <li><code><%= $u->{dependency} %></code> required by <code><%= $u->{plugin} %></code> &mdash; not installed, not on CPAN</li>
+          <li><code><%= $u->{dependency} %></code> <%= l('required by') %> <code><%= $u->{plugin} %></code> &mdash; <%= l('not installed, not on CPAN') %></li>
         % }
       </ul>
     </div>
@@ -29,13 +29,13 @@
   %# ── Done ────────────────────────────────────────────────────────
   % if (stash('is_done')) {
     <div class="alert alert-success">
-      <h4>Setup complete!</h4>
+      <h4><%= l('Setup complete!') %></h4>
       % if (my $path = stash('conf_path')) {
-        <p>Configuration saved to: <code><%= $path %></code></p>
+        <p><%= l('Configuration saved to:') %> <code><%= $path %></code></p>
       % }
       % my $p = stash('selected_plugins');
       % if ($p && @$p) {
-        <p>Configured plugins:</p>
+        <p><%= l('Configured plugins:') %></p>
         <ul>
           % for my $pl (@$p) {
             <li><code><%= $pl %></code></li>
@@ -43,21 +43,21 @@
         </ul>
       % }
       % if (stash('config_loaded')) {
-        <p>Run the following commands to apply and start:</p>
+        <p><%= l('Run the following commands to apply and start:') %></p>
         <pre class="mt-2"><code>myapp.pl fondation refresh
 myapp.pl daemon</code></pre>
       % } else {
         <div class="alert alert-warning mt-2">
-          <strong>Important:</strong>
-          The Config plugin is not loaded. Add this to your startup script:
+          <strong><%= l('Important:') %></strong>
+          <%= l('The Config plugin is not loaded. Add this to your startup script:') %>
           <pre class="mt-2"><code>plugin 'Config';</code></pre>
-          <p class="mb-0"><strong>Then run:</strong> <code>myapp.pl fondation refresh</code></p>
+          <p class="mb-0"><strong><%= l('Then run:') %></strong> <code>myapp.pl fondation refresh</code></p>
         </div>
       % }
     </div>
 
     <div class="mt-3">
-      <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger">Start Over</a>
+      <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger"><%= l('Start Over') %></a>
     </div>
 
   %# ── Review ──────────────────────────────────────────────────────
@@ -65,10 +65,10 @@ myapp.pl daemon</code></pre>
     % my $entries = stash('review_entries');
     % if ($entries && @$entries) {
     <div class="card mb-4">
-      <div class="card-header"><strong>Review</strong></div>
+      <div class="card-header"><strong><%= l('Review') %></strong></div>
       <div class="card-body">
         <table class="table table-striped">
-          <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+          <thead><tr><th><%= l('Parameter') %></th><th><%= l('Value') %></th></tr></thead>
           <tbody>
             % for my $e (@$entries) {
               <tr><td><code><%= $e->{key} %></code></td><td><%= $e->{value} %></td></tr>
@@ -84,17 +84,17 @@ myapp.pl daemon</code></pre>
         <form method="post" action="<%= url_for 'setup_execute' %>">
           %= csrf_field
           <input type="hidden" name="action" value="back">
-          <button type="submit" class="btn btn-secondary">Back</button>
+          <button type="submit" class="btn btn-secondary"><%= l('Back') %></button>
         </form>
         <form method="post" action="<%= url_for 'setup_execute' %>">
           %= csrf_field
           <input type="hidden" name="action" value="save">
-          <button type="submit" class="btn btn-success">Save Configuration</button>
+          <button type="submit" class="btn btn-success"><%= l('Save Configuration') %></button>
         </form>
-        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto">Reset</a>
+        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto"><%= l('Reset') %></a>
       % } else {
-        <a href="<%= url_for 'setup_plugins' %>" class="btn btn-primary">I have installed the plugins, retry</a>
-        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto">Reset</a>
+        <a href="<%= url_for 'setup_plugins' %>" class="btn btn-primary"><%= l('I have installed the plugins, retry') %></a>
+        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto"><%= l('Reset') %></a>
       % }
     </div>
 
@@ -160,14 +160,14 @@ myapp.pl daemon</code></pre>
 
       <div class="d-flex gap-2">
         % unless ($is_first) {
-          <button type="submit" name="action" value="back" class="btn btn-secondary">Back</button>
+          <button type="submit" name="action" value="back" class="btn btn-secondary"><%= l('Back') %></button>
         % }
         % if ($is_last) {
-          <button type="submit" name="action" value="save" class="btn btn-success">Save Configuration</button>
+          <button type="submit" name="action" value="save" class="btn btn-success"><%= l('Save Configuration') %></button>
         % } else {
-          <button type="submit" name="action" value="next" class="btn btn-primary">Next</button>
+          <button type="submit" name="action" value="next" class="btn btn-primary"><%= l('Next') %></button>
         % }
-        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto">Reset</a>
+        <a href="<%= url_for 'setup_reset' %>" class="btn btn-outline-danger ms-auto"><%= l('Reset') %></a>
       </div>
     </form>
   % }

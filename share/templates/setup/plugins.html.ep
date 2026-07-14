@@ -116,15 +116,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       } else {
         cb.removeAttribute('data-user-selected');
+        // Uncheck all transitive dependencies (updateLocks will re-check any still needed)
         var cascade = [cb.value];
+        var visited = {};
         while (cascade.length) {
           var v = cascade.shift(), el = all[v];
-          if (!el) continue;
+          if (!el || visited[v]) continue;
+          visited[v] = true;
           depsOf(el).forEach(function(d) {
             var de = all[d];
-            if (!de || !de.checked) return;
-            var needed = dependants(d).some(function(x) { return x !== v && all[x] && all[x].checked; });
-            if (!needed) { de.checked = false; de.removeAttribute('data-user-selected'); cascade.push(d); }
+            if (de && de.checked) { de.checked = false; de.removeAttribute('data-user-selected'); }
+            cascade.push(d);
           });
         }
       }

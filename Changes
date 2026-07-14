@@ -1,6 +1,8 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+
+0.08      2026-07-14 17:30:11+02:00 Europe/Paris
     - Foundation::SessionStore is required
 
 0.07      2026-07-14 17:24:15+02:00 Europe/Paris

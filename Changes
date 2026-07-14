@@ -1,6 +1,7 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+    - Foundation::SessionStore is required
 
 0.07      2026-07-14 17:24:15+02:00 Europe/Paris
     - Fix dependency cascade: aggressive uncheck + dev deps extraction

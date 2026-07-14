@@ -5,6 +5,7 @@ requires 'perl' => '5.026';
 # Runtime dependencies
 requires 'Mojolicious' => '9.46';
 requires 'Mojolicious::Plugin::Fondation::Layout::Bootstrap' => '0.01';
+requires 'Mojolicious::Plugin::Foundation::SessionStore'     => '0.01',
 
 requires 'YAML::XS' => '0.01';
 

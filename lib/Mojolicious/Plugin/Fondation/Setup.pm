@@ -8,7 +8,7 @@ sub fondation_meta {
     return {
         dependencies => [
             'Fondation::Layout::Bootstrap',
-            'Foundation::SessionStore',
+            'Fondation::SessionStore',
         ],
     };
 }

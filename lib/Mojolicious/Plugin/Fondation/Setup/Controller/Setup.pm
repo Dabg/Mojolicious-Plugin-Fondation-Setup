@@ -506,7 +506,7 @@ sub _dev_plugins ($self) {
                     $end++;
                 }
                 my $body = substr($src, $-[0], $end - $-[0]);
-                my $meta = eval qq{package _FondationDevMeta; $body; _FondationDevMeta::fondation_meta();};
+                my $meta = eval qq{no warnings 'redefine'; package _FondationDevMeta; $body; _FondationDevMeta::fondation_meta();};
                 if ($meta && !$@ && ref $meta eq 'HASH' && $meta->{dependencies}) {
                     $deps = $meta->{dependencies};
                     # Normalize to full class names

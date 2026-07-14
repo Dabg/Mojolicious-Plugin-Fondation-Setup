@@ -1,6 +1,8 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+
+0.05      2026-07-14 13:34:04+02:00 Europe/Paris
     - Rewrite Setup plugin: drop Workflow.pm too complex for this case,
     - use Mojolicious session instead cookie
 

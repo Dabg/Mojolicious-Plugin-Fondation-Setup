@@ -1,6 +1,7 @@
 Revision history for Mojolicious-Plugin-Fondation-Setup
 
 {{$NEXT}}
+    - delete NAME in POD
 
 0.10      2026-07-14 20:27:19+02:00 Europe/Paris
     - silence "fondation_meta redefined" warnings from _dev_plugins eval

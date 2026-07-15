@@ -4,7 +4,7 @@ Mojolicious::Plugin::Fondation::Setup - Setup wizard with session-based state (c
 
 # VERSION
 
-version 0.07
+version 0.10
 
 # SYNOPSIS
 

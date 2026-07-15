@@ -33,10 +33,6 @@ __END__
 
 =encoding UTF-8
 
-=head1 NAME
-
-Mojolicious::Plugin::Fondation::Setup — Interactive web wizard for configuring Fondation applications
-
 =head1 SYNOPSIS
 
   # myapp.pl

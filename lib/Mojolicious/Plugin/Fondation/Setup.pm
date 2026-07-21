@@ -51,8 +51,20 @@ __END__
 
   # 2. Create myapp.pl
   echo 'use Mojolicious::Lite;
-  plugin "Fondation" => { dependencies => ["Fondation::Setup"] };
+  use lib 'lib';
+  plugin "Config";
+  plugin "Fondation";
   app->start;' > myapp.pl
+
+  # 2. Create myapp.conf
+  {
+    Fondation => {
+      dependencies => [
+        'Fondation::Setup',
+      ]
+    },
+  }
+
 
   # 3. Initialize (creates assets, etc.)
   perl myapp.pl fondation init

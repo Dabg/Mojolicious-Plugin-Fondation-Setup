@@ -295,11 +295,8 @@ sub _discover ($self, $cb) {
                 $p->{is_dev}            = 1;
                 $p->{installed}         = 1;
                 $p->{installed_version} = $d->{installed_version};
-                # Merge dev dependencies into CPAN deps (union)
-                my %seen = map { $_ => 1 } @{ $p->{dependencies} // [] };
-                for my $dd (@{ $d->{dependencies} // [] }) {
-                    push @{ $p->{dependencies} }, $dd unless $seen{$dd}++;
-                }
+                # Replace MetaCPAN dependencies with dev (dev is the source of truth)
+                $p->{dependencies} = $d->{dependencies};
             }
             $p->{upgrade_available} = 0;
             $p->{release_pending}   = 0;
